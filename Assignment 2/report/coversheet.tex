@@ -1,0 +1,44 @@
+%%%%%%%%% begin snippet
+%% You need to add the package "tabularx".
+%% Place the snippet right after \begin{document}
+\documentclass{article}
+\usepackage{tabularx}
+\begin{document}
+% need tabularx
+
+\begin{titlepage}
+       \begin{center}
+             \begin{huge}
+				   %% Update assignment number here
+               \textbf{Assignment} \rule{1em}{1pt}
+             \end{huge}
+       \end{center}
+
+       \begin{center}
+             \begin{large}
+                   Reinforcement Learning, WS2022/23
+             \end{large}
+       \end{center}
+
+       \begin{center}
+ \begin{tabularx}{\textwidth}{|>{\hsize=.33\hsize}X|>{\hsize=.33\hsize}X|>{\hsize=.33\hsize}X|} 
+                   \hline
+                   \multicolumn{3}{|c|}{\textbf{Team Members}} \\\hline
+                   Last name & First name & Matriculation Number \\\hline
+                             & & \\\hline
+                             & & \\\hline
+                   % Anderson & Alice & 1500001 \\
+                   % \hline
+                   % Binford & Bob & 1600002 \\
+                   % \hline
+                   % Crawford & Cindy & 1700003 \\
+                   % \hline
+
+             \end{tabularx}
+       \end{center}
+
+\end{titlepage}
+\end{document}
+
+
+%%%%%%%%% end snippet
