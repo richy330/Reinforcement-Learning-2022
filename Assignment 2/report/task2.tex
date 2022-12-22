@@ -1,0 +1,84 @@
+\section{Task 2: Non-tabular RL}
+\subsection{Deriving the parameter update rules for linear models}
+
+Linear models for non-tabular reinforcement learning replace the Q-function with a linear model, as in the following:
+
+$$
+Q(s,a) \rightarrow Q_{\theta}(s,a) = \theta_a ^{T} \cdot s 
+$$
+Where $s$ is not a vector of states, but instead a vector describing one state. The Q-function is now a linear function of the vector describing this state.
+
+The update of the Q-function is then replaced with an update of the parameter matrix, according to gradient decent of a cost function $E$. $\alpha$ can be interpreted as a stepsize.
+$$
+Q(s,a) \leftarrow Q(s,a) - \alpha (Q(s,a) - y) 
+$$
+$$
+\theta_a \leftarrow \theta_a - \alpha \nabla_{\theta_a} E 
+$$
+
+We therefore need a cost-function and its gradient with respect to the parameter matrix. A common choice is the quadratic error function of the following form:
+
+$$
+E = \frac{1}{2} (Q(s,a) - y)^2
+$$
+
+We consider two different cases for parameter updating, one with constant $y$ and one with $y$ being a function of the parameter-matrix $\theta_a$. The gradients are found by deriving the cost function with respect to the parameter matrix.
+
+\subsubsection{Constant $y$:}
+
+$$
+E(\theta_a) = \frac{1}{2} (\theta_a ^{T} s - y)^2
+$$
+Derivation of $E$ with respect to $\theta_a$ requires the chain rule and gives the following result:
+$$
+\nabla_{\theta_a} E = (\theta_a ^{T} s - y)s
+$$
+
+
+
+
+
+Inserting the gradient of the error-function into above equation gives us the new update rule and results in the following form:
+
+$$
+\theta_a \leftarrow \theta_a - \alpha (\theta_a ^{T} s - y)s
+$$
+Which is equivalent to 
+$$
+\theta_a \leftarrow \theta_a - \alpha (Q_{\theta}(s,a) - y)s
+$$
+
+
+\subsubsection{$y$ as a function of $\theta_a$:}
+
+Here, we will assume $y$ to be of the form:
+$$
+y = r + \gamma Q_{\theta}(s', a')
+$$
+
+The cost function is now dependent on $\theta_a ^{T}$ and $\theta_{a'} ^{T}$ :
+$$
+E(\theta_a, \theta_{a'}) = \frac{1}{2} (\theta_a ^{T} s - y(\theta_{a'}))^2 = \frac{1}{2} (\theta_a ^{T} s - r - \gamma \theta_{a'}^{T} s')^2
+$$
+
+We can now derive two gradients, one with respect to $\theta_a$ like before and one with respect to $\theta_{a'}$. This will again require the chain rule and yield the following results:
+$$
+\nabla_{\theta_a} E = (\theta_a ^{T} s - y)s
+$$
+
+$$
+\nabla_{\theta_{a'}} E = (\theta_a ^{T} s - y)(-\gamma s')
+$$
+
+Inserting these gradients of the error-function into the gradient-descent function gives us two update rules of the following form:
+
+$$
+\theta_a \leftarrow \theta_a - \alpha (Q_{\theta}(s,a) - y)s
+$$
+
+$$
+\theta_{a'} \leftarrow \theta_{a'} + \alpha \gamma (Q_{\theta}(s,a) - y)s'
+$$
+
+
+

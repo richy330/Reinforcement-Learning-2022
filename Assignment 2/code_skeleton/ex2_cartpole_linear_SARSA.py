@@ -7,6 +7,9 @@ import torch.optim as optim
 from cartpole_utils import plot_results
 from utils import env_reset, env_step, update, update_metrics, print_metrics
 
+rng = np.random.default_rng()
+
+
 def convert(x):
   return torch.tensor(x).float().unsqueeze(0)
 
@@ -32,12 +35,17 @@ class CartpoleLinearSARSA:
 
 
   def policy(self, state, training):
-    # TODO: Implement an epsilon-greedy policy
+    # DONE: Implement an epsilon-greedy policy
     # - with probability eps return a random action
     # - otherwise find the action that maximizes Q
     # - During the rollout phase, we don't need to compute the gradient!
     #   (Hint: use torch.no_grad()). The policy should return torch tensors.
-    return ...
+    if rng.uniform() > self.eps:
+        action = np.argmax(self.Q[state])
+    else:
+        action = rng.integers(0, self.num_actions)
+    return convert(action)
+    
 
 
   def compute_loss(self, state, action, reward, next_state, next_action, done):
