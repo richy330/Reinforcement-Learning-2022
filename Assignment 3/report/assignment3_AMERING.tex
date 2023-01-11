@@ -1,0 +1,69 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage{fontspec}
+\defaultfontfeatures{Mapping=tex-text}
+\usepackage{xunicode}
+\usepackage{xltxtra}
+%\setmainfont{???}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{hyperref}
+%\usepackage{cleveref}
+\usepackage{listings}
+\usepackage[a4paper, inner=2.5cm, outer=2.5cm, top=2cm, bottom=3cm]{geometry}
+\usepackage{parskip}
+
+
+\usepackage{subcaption}
+
+\usepackage{graphicx}
+\graphicspath{{./plots/}}
+
+
+\author{Richard Amering - Michael Mitterlindner}
+
+
+
+\newcommand\musteq{\stackrel{\normalfont\mbox{!}}{ = }}
+\newcommand{\etal}{\textit{et al}. }
+\newcommand{\ie}{\textit{i}.\textit{e}. }
+\newcommand{\eg}{\textit{e}.\textit{g}.\ }
+
+\newtoks\rowvectoks
+\newcommand{\rowvec}[2]{%
+  \rowvectoks={#2}\count255=#1\relax
+  \advance\count255 by -1
+  \rowvecnexta}
+\newcommand{\rowvecnexta}{%
+  \ifnum\count255>0
+    \expandafter\rowvecnextb
+  \else
+    \begin{pmatrix}\the\rowvectoks\end{pmatrix}
+  \fi}
+\newcommand\rowvecnextb[1]{%
+    \rowvectoks=\expandafter{\the\rowvectoks&#1}%
+    \advance\count255 by -1
+    \rowvecnexta}
+    
+    
+
+\begin{document}
+
+\begin{titlepage}
+\input{assignment-coverpage-RL}
+\end{titlepage}
+
+
+
+
+\newpage 
+\input{task1}
+
+
+\newpage 
+\input{task2}
+
+
+\end{document}
