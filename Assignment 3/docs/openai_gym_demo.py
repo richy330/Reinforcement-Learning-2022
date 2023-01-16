@@ -16,7 +16,8 @@ import gym
 # env = gym.make("Taxi-v3", render_mode="human")
 # env = gym.make("ALE/Breakout-v5", render_mode="human")
 # env = gym.make("ALE/Tennis-v5", render_mode="human")
-env = gym.make("ALE/Boxing-v5", render_mode="human")
+# env = gym.make("ALE/Boxing-v5", render_mode="human")
+env = gym.make("ALE/SpaceInvaders-v5", full_action_space=False, render_mode="human")
 
 reset = env.reset()
 

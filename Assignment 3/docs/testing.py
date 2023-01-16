@@ -117,7 +117,7 @@ class DeepQNet(torch.nn.Module):
         self.pool = torch.nn.MaxPool2d(2, 2)
         # fc: Full Connection
         # self.fc1 = torch.nn.Linear(20 * 2 * 2, 40)
-        # TODO: find out how to come up with 1280 here
+        # Rich: find out how to come up with 1280 here
         self.fc1 = torch.nn.Linear(1280, 40)
         self.fc2 = torch.nn.Linear(40, num_actions)
 
@@ -157,7 +157,7 @@ def compute_loss(state, action, reward, next_state, done):
     # Rich: state, action, etc are already torch tensors of sampled batches
     
     Q_online = torch.take(online_dqn(state), action.long())
-    Q_target_max, _ = target_dqn(state).max(dim=1)
+    Q_target_max, _ = target_dqn(next_state).max(dim=1)
     Q_target = reward + gamma * Q_target_max * (1 - done.long())
     return criterion(Q_online, Q_target)
 
@@ -196,9 +196,9 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
                 loss.backward()
                 optimizer.step()
                 episode_loss += loss.item()
-        else:
-            with torch.no_grad():
-                episode_loss += compute_loss(state, action, reward, next_state, done).item()
+        # else:
+        #     with torch.no_grad():
+        #         episode_loss += compute_loss(state, action, reward, next_state, done).item()
 
         state = next_state
 
@@ -212,7 +212,7 @@ def update_metrics(metrics: dict, episode: dict):
         metrics[k].append(v)
 
 
-def print_metrics(it: int, metrics: dict, is_training: bool, window=100, it_per_hour=None):
+def print_metrics(it: int, metrics: dict, is_training: bool, window=100, it_per_hour=0):
     reward_mean = np.mean(metrics['reward'][-window:])
     loss_mean = np.mean(metrics['loss'][-window:])
     mode = "train" if is_training else "test"
@@ -229,8 +229,8 @@ def save_checkpoint(curr_step: int, eps: float, train_metrics: dict):
 
     
 
-env_rendering = False    # Set to False while training your model on Colab
-testing_mode = False
+env_rendering = True    # Set to False while training your model on Colab
+testing_mode = True
 test_model_directory = './your_saved_model.pth.tar'
 
 # Create and preprocess the Space Invaders environment
@@ -238,6 +238,7 @@ if env_rendering:
     env = gym.make("ALE/SpaceInvaders-v5", full_action_space=False, render_mode="human")
 else:
     env = gym.make("ALE/SpaceInvaders-v5", full_action_space=False)
+
 env = SkipFrame(env, skip=4)
 env = GrayScaleObservation(env)
 env = ResizeObservation(env, shape=84)
@@ -279,23 +280,47 @@ online_dqn = DeepQNet(h, w, image_stack, num_actions)
 target_dqn = copy.deepcopy(online_dqn)
 online_dqn.to(device)
 target_dqn.to(device)
-for param in online_dqn.parameters():
+for param in target_dqn.parameters():
     param.requires_grad = False
 
 # TODO: create the appropriate MSE criterion and Adam optimizer
 # Rich: decide if online or target parameters to be passed to Adam
-optimizer = torch.optim.Adam(target_dqn.parameters())
+optimizer = torch.optim.Adam(online_dqn.parameters())
 criterion = torch.nn.MSELoss()
 
 
 if testing_mode:
     # TODO: Load your saved online_dqn model for evaluation
     # ...
+    
+    checkpoint = torch.load(test_model_directory)
+    online_state_dict = checkpoint['online_dqn']
+    target_state_dict = checkpoint['target_dqn']
+    curr_step = checkpoint['curr_step']
+    train_metrics = checkpoint['train_metrics']
+    eps = checkpoint['eps']
+    
+    
+    online_dqn = DeepQNet(h, w, image_stack, num_actions)
+    online_dqn.load_state_dict(online_state_dict)
+    target_dqn = DeepQNet(h, w, image_stack, num_actions)
+    target_dqn.load_state_dict(target_state_dict)
+    
+    
+    
     test_metrics = dict(reward=[], loss=[])
     for it in range(max_test_episodes):
         episode_metrics, curr_step = run_episode(curr_step, buffer, is_training=False)
         update_metrics(test_metrics, episode_metrics)
-        print_metrics(it + 1, test_metrics, is_training=False)
+        print_metrics(it + 1, test_metrics, is_training=False, window=1)
+
+
+        
+        
+        
+        
+        
+        
 else:
     train_metrics = dict(reward=[], loss=[])
     t0 = time.time()
