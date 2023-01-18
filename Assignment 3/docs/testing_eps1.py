@@ -21,9 +21,36 @@ from collections import deque
 import copy
 from gym.wrappers import FrameStack
 
+# import cProfile, pstats
+# from pstats import SortKey
+
+# profiler = cProfile.Profile()
+# profiler.enable()
 
 rng = np.random.default_rng()
+eps_init = 1.0
 
+
+
+# Hyperparameters (to be modified)
+batch_size = 32
+obs_size = 84
+alpha = 0.00025
+gamma = 0.95
+eps, eps_decay, min_eps = eps_init, 0.999, 0.05
+experience_replay_size = 10_000
+burn_in_phase = 2_000
+sync_target = 10_000
+max_train_frames = 10_000
+max_train_episodes = 50_000
+max_test_episodes = 1
+curr_step = 0
+print_metric_period = 1
+save_network_period = 100
+
+env_rendering = False    # Set to False while training your model on Colab
+testing_mode = False    # if True, also give the checkpoint directory to load!
+#checkpoint_directory = './standard_model_eps_init{eps}_episode{episode_number}.pth.tar'
 
 
 class SkipFrame(gym.Wrapper):
@@ -69,13 +96,14 @@ class ResizeObservation(gym.ObservationWrapper):
         return transforms(observation).squeeze(0)
 
 
+
 class ExperienceReplayMemory(object):
     def __init__(self, capacity):
         self.memory = deque([], maxlen=capacity)
 
     def __len__(self):
-        return len(self.memory)
-
+        return len(self.memory)        
+    
     def store(self, state, next_state, action, reward, done):
         state = state.__array__()
         next_state = next_state.__array__()
@@ -84,21 +112,21 @@ class ExperienceReplayMemory(object):
     def sample(self, batch_size):
         # TODO: uniformly sample batches of Tensors for: state, next_state, action, reward, done
         # ...
-        state, next_state, action, reward, done = [], [], [], [], []
+
+        state = torch.empty(size=(batch_size, image_stack, obs_size, obs_size))
+        next_state = torch.empty(size=(batch_size, image_stack, obs_size, obs_size))
+        action = torch.empty(size=(32,))
+        reward = torch.empty(size=(32,))
+        done = torch.empty(size=(32,))
         sample_indizes = rng.choice(len(self), size=batch_size, replace=True)
-        for index in sample_indizes:
+        for i, index in enumerate(sample_indizes):
             one_state, one_next_state, one_action, one_reward, one_done = self.memory[index]
-            state.append(one_state)
-            next_state.append(one_next_state)
-            action.append(one_action)
-            reward.append(one_reward)
-            done.append(one_done)
-        return (
-            torch.tensor(state), 
-            torch.tensor(next_state), 
-            torch.tensor(action), 
-            torch.tensor(reward), 
-            torch.tensor(done))
+            state[i, :, :, :] = torch.from_numpy(one_state)
+            next_state[i, :, :, :] = torch.from_numpy(one_next_state)
+            action[i] = one_action
+            reward[i] = one_reward
+            done[i] = one_done
+        return state, next_state, action, reward, done
 
 
 
@@ -111,15 +139,13 @@ class DeepQNet(torch.nn.Module):
         
         # Grayscale image has one channel only, but we send 4 images per sample
         n_input_channes = image_stack
-        self.conv1 = torch.nn.Conv2d(in_channels=n_input_channes, out_channels=5, kernel_size=(3, 3))
-        self.conv2 = torch.nn.Conv2d(in_channels=5, out_channels=10, kernel_size=(3, 3))
-        self.conv3 = torch.nn.Conv2d(in_channels=10, out_channels=20, kernel_size=(3, 3))
+        self.conv1 = torch.nn.Conv2d(in_channels=n_input_channes, out_channels=4, kernel_size=(3, 3))
+        self.conv2 = torch.nn.Conv2d(in_channels=4, out_channels=8, kernel_size=(3, 3))
+        self.conv3 = torch.nn.Conv2d(in_channels=8, out_channels=16, kernel_size=(3, 3))
         self.pool = torch.nn.MaxPool2d(2, 2)
         # fc: Full Connection
-        # self.fc1 = torch.nn.Linear(20 * 2 * 2, 40)
-        # Rich: find out how to come up with 1280 here
-        self.fc1 = torch.nn.Linear(1280, 40)
-        self.fc2 = torch.nn.Linear(40, num_actions)
+        self.fc1 = torch.nn.Linear(1024, 20)
+        self.fc2 = torch.nn.Linear(20, num_actions)
 
     def forward(self, x):
         # TODO: forward pass from the neural network
@@ -174,7 +200,7 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
         curr_step += 1
         next_state, reward, done, _ = env.step(action)
         episode_reward += reward
-
+        
         if is_training:
             buffer.store(state, next_state, action, reward, done)
             
@@ -196,9 +222,9 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
                 loss.backward()
                 optimizer.step()
                 episode_loss += loss.item()
-        # else:
-        #     with torch.no_grad():
-        #         episode_loss += compute_loss(state, action, reward, next_state, done).item()
+        else:
+            with torch.no_grad():
+                episode_loss += compute_loss(state, action, reward, next_state, done).item()
 
         state = next_state
 
@@ -219,20 +245,19 @@ def print_metrics(it: int, metrics: dict, is_training: bool, window=100, it_per_
     print(f"Episode {it:4d} | {mode:5s} | Episodes/h {it_per_hour:.2f}| reward {reward_mean:5.5f} | loss {loss_mean:5.5f}")
 
 
-def save_checkpoint(curr_step: int, eps: float, train_metrics: dict):
+def save_checkpoint(curr_step: int, eps: float, train_metrics: dict, checkpoint_directory):
     save_dict = {'curr_step': curr_step, 
                  'train_metrics': train_metrics, 
                  'eps': eps,
                  'online_dqn': online_dqn.state_dict(), 
                  'target_dqn': target_dqn.state_dict()}
-    torch.save(save_dict, './your_saved_model.pth.tar')
+    torch.save(save_dict, checkpoint_directory)
 
     
 
-env_rendering = True    # Set to False while training your model on Colab
-testing_mode = True
-test_model_directory = './your_saved_model.pth.tar'
 
+
+buffer = ExperienceReplayMemory(experience_replay_size)
 # Create and preprocess the Space Invaders environment
 if env_rendering:
     env = gym.make("ALE/SpaceInvaders-v5", full_action_space=False, render_mode="human")
@@ -241,7 +266,7 @@ else:
 
 env = SkipFrame(env, skip=4)
 env = GrayScaleObservation(env)
-env = ResizeObservation(env, shape=84)
+env = ResizeObservation(env, shape=obs_size)
 env = FrameStack(env, num_stack=4)
 image_stack, h, w = env.observation_space.shape
 num_actions = env.action_space.n
@@ -260,21 +285,6 @@ if torch.backends.cudnn.enabled:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-# Hyperparameters (to be modified)
-batch_size = 32
-alpha = 0.00025
-gamma = 0.95
-eps, eps_decay, min_eps = 1.0, 0.999, 0.05
-buffer = ExperienceReplayMemory(5_000)
-burn_in_phase = 20_000
-sync_target = 30_000
-max_train_frames = 10_000
-max_train_episodes = 100_000
-max_test_episodes = 1
-curr_step = 0
-print_metric_period = 1
-save_network_period = 50
-
 
 online_dqn = DeepQNet(h, w, image_stack, num_actions)
 target_dqn = copy.deepcopy(online_dqn)
@@ -284,7 +294,6 @@ for param in target_dqn.parameters():
     param.requires_grad = False
 
 # TODO: create the appropriate MSE criterion and Adam optimizer
-# Rich: decide if online or target parameters to be passed to Adam
 optimizer = torch.optim.Adam(online_dqn.parameters())
 criterion = torch.nn.MSELoss()
 
@@ -293,7 +302,7 @@ if testing_mode:
     # TODO: Load your saved online_dqn model for evaluation
     # ...
     
-    checkpoint = torch.load(test_model_directory)
+    checkpoint = torch.load(checkpoint_directory)
     online_state_dict = checkpoint['online_dqn']
     target_state_dict = checkpoint['target_dqn']
     curr_step = checkpoint['curr_step']
@@ -314,12 +323,7 @@ if testing_mode:
         update_metrics(test_metrics, episode_metrics)
         print_metrics(it + 1, test_metrics, is_training=False, window=1)
 
-
-        
-        
-        
-        
-        
+  
         
 else:
     train_metrics = dict(reward=[], loss=[])
@@ -332,7 +336,8 @@ else:
         if curr_step > burn_in_phase and eps > min_eps:
             eps *= eps_decay
         if it % print_metric_period == 0:
-            print_metrics(it, train_metrics, is_training=True, it_per_hour=it_per_hour)
+            print_metrics(it, train_metrics, is_training=True, it_per_hour=it_per_hour, window=1)
         if it % save_network_period == 0:
-            save_checkpoint(curr_step, eps, train_metrics)
-        t0 = time.time()
+            checkpoint_directory = f'./standard_model_eps_init{eps_init}_episode{it}.pth.tar'
+            save_checkpoint(curr_step, eps, train_metrics, checkpoint_directory)
+        t0 = time.time()     
