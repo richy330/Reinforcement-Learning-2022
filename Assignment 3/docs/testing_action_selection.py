@@ -30,14 +30,14 @@ from gym.wrappers import FrameStack
 rng = np.random.default_rng()
 
 
-eps_init = 0.2
+eps_init = 0
 
 # Hyperparameters (to be modified)
 batch_size = 32
 obs_size = 84
 alpha = 0.00025
 gamma = 0.95
-eps, eps_decay, min_eps = eps_init, 0.999, 0.05
+eps, eps_decay, min_eps = eps_init, 0.999, 0.00
 experience_replay_size = 10_000
 burn_in_phase = 2_000
 sync_target = 10_000
@@ -48,9 +48,9 @@ curr_step = 0
 print_metric_period = 1
 save_network_period = 100
 
-env_rendering = True    # Set to False while training your model on Colab
-testing_mode = True    # if True, also give the checkpoint directory to load!
-checkpoint_directory = './standard_model_eps_init0.5_episode35000.pth.tar'
+env_rendering = False    # Set to False while training your model on Colab
+testing_mode = False    # if True, also give the checkpoint directory to load!
+#checkpoint_directory = './standard_model_eps_init{eps}_episode{episode_number}.pth.tar'
 
 
 class SkipFrame(gym.Wrapper):
@@ -167,9 +167,13 @@ def policy(state, is_training):
     # TODO: Implement an epsilon-greedy policy
     # Rich: Decide if we use the online- or target network for finding the greedy action
     if is_training and (rng.random() <= eps):
-        return env.action_space.sample()
+        action = env.action_space.sample()
+        print(f'selected random action: {action}')
+        return action
     else:
-        return online_dqn(state).argmax()
+        action = online_dqn(state).argmax()
+        print(f'selected greedy action: {action}')
+        return action
 
 
 def compute_loss(state, action, reward, next_state, done):
@@ -222,9 +226,9 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
                 loss.backward()
                 optimizer.step()
                 episode_loss += loss.item()
-        # else:
-        #     with torch.no_grad():
-        #         episode_loss += compute_loss(state, action, reward, next_state, done).item()
+        else:
+            with torch.no_grad():
+                episode_loss += compute_loss(state, action, reward, next_state, done).item()
 
         state = next_state
 
