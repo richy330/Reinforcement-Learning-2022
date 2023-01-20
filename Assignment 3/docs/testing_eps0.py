@@ -42,15 +42,16 @@ experience_replay_size = 10_000
 burn_in_phase = 2_000
 sync_target = 10_000
 max_train_frames = 10_000
-max_train_episodes = 50_000
+max_train_episodes = 2_000
 max_test_episodes = 1
 curr_step = 0
 print_metric_period = 1
-save_network_period = 100
+save_network_period = 20
 
 env_rendering = False    # Set to False while training your model on Colab
 testing_mode = False    # if True, also give the checkpoint directory to load!
-#checkpoint_directory = './standard_model_eps_init{eps}_episode{episode_number}.pth.tar'
+episode_number = 35000
+checkpoint_directory = f'./standard_model_eps_init{0.5}_episode{episode_number}.pth.tar'
 
 
 class SkipFrame(gym.Wrapper):
@@ -115,17 +116,27 @@ class ExperienceReplayMemory(object):
 
         state = torch.empty(size=(batch_size, image_stack, obs_size, obs_size))
         next_state = torch.empty(size=(batch_size, image_stack, obs_size, obs_size))
-        action = torch.empty(size=(32,))
-        reward = torch.empty(size=(32,))
-        done = torch.empty(size=(32,))
-        sample_indizes = rng.choice(len(self), size=batch_size, replace=True)
-        for i, index in enumerate(sample_indizes):
-            one_state, one_next_state, one_action, one_reward, one_done = self.memory[index]
-            state[i, :, :, :] = torch.from_numpy(one_state)
-            next_state[i, :, :, :] = torch.from_numpy(one_next_state)
-            action[i] = one_action
-            reward[i] = one_reward
-            done[i] = one_done
+        action = torch.empty(size=(batch_size,))
+        reward = torch.empty(size=(batch_size,))
+        done = torch.empty(size=(batch_size,))
+        
+        
+        samples = random.sample(self.memory, batch_size)
+        state = torch.tensor(np.array([s[0] for s in samples]), dtype=torch.float32)
+        next_state = torch.tensor(np.array([s[1] for s in samples]), dtype=torch.float32)
+        action = torch.tensor(np.array([s[2] for s in samples]), dtype=torch.float32)
+        reward = torch.tensor(np.array([s[3] for s in samples]), dtype=torch.float32)
+        done = torch.tensor(np.array([s[4] for s in samples]), dtype=torch.float32)
+        
+
+        # sample_indizes = rng.choice(len(self), size=batch_size, replace=True)
+        # for i, index in enumerate(sample_indizes):
+        #     one_state, one_next_state, one_action, one_reward, one_done = self.memory[index]
+        #     state[i, :, :, :] = torch.from_numpy(one_state)
+        #     next_state[i, :, :, :] = torch.from_numpy(one_next_state)
+        #     action[i] = one_action
+        #     reward[i] = one_reward
+        #     done[i] = one_done
         return state, next_state, action, reward, done
 
 
@@ -138,13 +149,15 @@ class DeepQNet(torch.nn.Module):
         # Rich: find out how to properly use the conctructor-arguments here
         
         # Grayscale image has one channel only, but we send 4 images per sample
+        # increase number of channesls
         n_input_channes = image_stack
-        self.conv1 = torch.nn.Conv2d(in_channels=n_input_channes, out_channels=4, kernel_size=(3, 3))
-        self.conv2 = torch.nn.Conv2d(in_channels=4, out_channels=8, kernel_size=(3, 3))
-        self.conv3 = torch.nn.Conv2d(in_channels=8, out_channels=16, kernel_size=(3, 3))
+        self.conv1 = torch.nn.Conv2d(in_channels=n_input_channes, out_channels=32, kernel_size=(3, 3))
+        self.conv2 = torch.nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(3, 3))
+        self.conv3 = torch.nn.Conv2d(in_channels=64, out_channels=128, kernel_size=(3, 3))
         self.pool = torch.nn.MaxPool2d(2, 2)
         # fc: Full Connection
-        self.fc1 = torch.nn.Linear(1024, 20)
+        
+        self.fc1 = torch.nn.Linear(8192, 20)
         self.fc2 = torch.nn.Linear(20, num_actions)
 
     def forward(self, x):
@@ -161,11 +174,14 @@ class DeepQNet(torch.nn.Module):
 def convert(x):
     return torch.tensor(x.__array__()).float()
    
+    
+   # state: always lazyframe!!
 def policy(state, is_training):
     global eps
-    state = convert(state).unsqueeze(0).to(device)
     # TODO: Implement an epsilon-greedy policy
     # Rich: Decide if we use the online- or target network for finding the greedy action
+    
+    state = convert(state).unsqueeze(0).to(device)
     if is_training and (rng.random() <= eps):
         return env.action_space.sample()
     else:
@@ -175,16 +191,17 @@ def policy(state, is_training):
 def compute_loss(state, action, reward, next_state, done):
     state = convert(state).to(device)
     next_state = convert(next_state).to(device)
-    action = action.to(device)
-    reward = reward.to(device)
-    done = done.to(device)
+    action = action
+    reward = reward
+    done = done
     
     # TODO: Compute the DQN (or DDQN) loss based on the criterion
     # Rich: state, action, etc are already torch tensors of sampled batches
     
     Q_online = torch.take(online_dqn(state), action.long())
     Q_target_max, _ = target_dqn(next_state).max(dim=1)
-    Q_target = reward + gamma * Q_target_max * (1 - done.long())
+    
+    Q_target = reward + gamma * Q_target_max * (1 - done.float())
     return criterion(Q_online, Q_target)
 
 
@@ -216,7 +233,11 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
                     print(f'Syncing Networks (current step: {curr_step})')
                     target_dqn.load_state_dict(online_dqn.state_dict())
 
-                    
+                # state_batch: Tensor 32x4x84x84
+                # action_batch: Tensor 32
+                # reward_batch: Tensor 32
+                # next_state_batch: Tensor 32x4x84x84
+                # done_batch: Tensor 32
                 loss = compute_loss(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
                 optimizer.zero_grad()
                 loss.backward()
@@ -224,7 +245,13 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
                 episode_loss += loss.item()
         else:
             with torch.no_grad():
-                episode_loss += compute_loss(state, action, reward, next_state, done).item()
+                print(f'type of state: {type(state)}')
+                print(f'shape of state: {state.shape}')
+                state_tensor = convert(state).unsqueeze(0)
+                next_state_tensor = convert(next_state).unsqueeze(0)
+                reward = torch.tensor(reward)
+                done = torch.tensor(done)
+                episode_loss += compute_loss(state_tensor, action, reward, next_state_tensor, done).item()
 
         state = next_state
 

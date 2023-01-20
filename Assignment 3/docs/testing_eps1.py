@@ -28,7 +28,7 @@ from gym.wrappers import FrameStack
 # profiler.enable()
 
 rng = np.random.default_rng()
-eps_init = 1.0
+eps_init = 0.5
 
 
 
@@ -51,8 +51,8 @@ save_network_period = 100
 env_rendering = False   # Set to False while training your model on Colab
 testing_mode = False # if True, also give the checkpoint directory to load!
 
-load_state = True    #Set to True to load a state
-episode_number = 7600   #Number of episode to load
+load_state = False    #Set to True to load a pretrained state
+episode_number = 35_000   #Number of episode to load
 checkpoint_directory = f'./standard_model_eps_init{eps}_episode{episode_number}.pth.tar'
 
 class SkipFrame(gym.Wrapper):
@@ -223,6 +223,8 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
                 episode_loss += loss.item()
         else:
             with torch.no_grad():
+                reward = torch.tensor(reward)
+                done = torch.tensor(done)
                 episode_loss += compute_loss(state, action, reward, next_state, done).item()
 
         state = next_state
@@ -296,7 +298,7 @@ if torch.backends.cudnn.enabled:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-if load_state or testing_mode == True:
+if load_state or testing_mode:
     online_dqn, target_dqn, curr_step, train_metrics, eps = load_dqn(checkpoint_directory)
 else:
     online_dqn = DeepQNet(h, w, image_stack, num_actions)
