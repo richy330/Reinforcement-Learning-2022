@@ -50,8 +50,11 @@ save_network_period = 100
 
 env_rendering = False    # Set to False while training your model on Colab
 testing_mode = False    # if True, also give the checkpoint directory to load!
-#checkpoint_directory = './standard_model_eps_init{eps}_episode{episode_number}.pth.tar'
 
+load_state = True       #Set to True to load a state
+episode_number = 3200   #Number of episode to load
+checkpoint_directory = './standard_model_eps_init1.0_episode3200.pth.tar'
+#checkpoint_directory = './standard_model_eps_init{eps}_episode{episode_number}.pth.tar'
 
 class SkipFrame(gym.Wrapper):
     def __init__(self, env, skip):
@@ -253,7 +256,25 @@ def save_checkpoint(curr_step: int, eps: float, train_metrics: dict, checkpoint_
                  'target_dqn': target_dqn.state_dict()}
     torch.save(save_dict, checkpoint_directory)
 
+def load_dqn(checkpoint_directory):
+    checkpoint = torch.load(checkpoint_directory)
+    online_state_dict = checkpoint['online_dqn']
+    target_state_dict = checkpoint['target_dqn']
+    curr_step = checkpoint['curr_step']
+    train_metrics = checkpoint['train_metrics']
+    eps = checkpoint['eps']
     
+    online_dqn = DeepQNet(h, w, image_stack, num_actions)
+    online_dqn.load_state_dict(online_state_dict)
+    target_dqn = DeepQNet(h, w, image_stack, num_actions)
+    target_dqn.load_state_dict(target_state_dict)
+    
+    online_dqn.to(device)
+    target_dqn.to(device)
+    
+
+     
+    return online_dqn, target_dqn, curr_step, train_metrics
 
 
 
@@ -285,14 +306,18 @@ if torch.backends.cudnn.enabled:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-
-online_dqn = DeepQNet(h, w, image_stack, num_actions)
-target_dqn = copy.deepcopy(online_dqn)
-online_dqn.to(device)
-target_dqn.to(device)
+if load_state:
+    online_dqn, target_dqn, curr_step, train_metrics = load_dqn(checkpoint_directory)
+    it = episode_number +1
+else:
+    online_dqn = DeepQNet(h, w, image_stack, num_actions)
+    target_dqn = copy.deepcopy(online_dqn)
+    online_dqn.to(device)
+    target_dqn.to(device)
+    epsilon_number = 0
+        
 for param in target_dqn.parameters():
     param.requires_grad = False
-
 # TODO: create the appropriate MSE criterion and Adam optimizer
 optimizer = torch.optim.Adam(online_dqn.parameters())
 criterion = torch.nn.MSELoss()
@@ -302,18 +327,18 @@ if testing_mode:
     # TODO: Load your saved online_dqn model for evaluation
     # ...
     
-    checkpoint = torch.load(checkpoint_directory)
-    online_state_dict = checkpoint['online_dqn']
-    target_state_dict = checkpoint['target_dqn']
-    curr_step = checkpoint['curr_step']
-    train_metrics = checkpoint['train_metrics']
-    eps = checkpoint['eps']
+    # checkpoint = torch.load(checkpoint_directory)
+    # online_state_dict = checkpoint['online_dqn']
+    # target_state_dict = checkpoint['target_dqn']
+    # curr_step = checkpoint['curr_step']
+    # train_metrics = checkpoint['train_metrics']
+    # eps = checkpoint['eps']
     
     
-    online_dqn = DeepQNet(h, w, image_stack, num_actions)
-    online_dqn.load_state_dict(online_state_dict)
-    target_dqn = DeepQNet(h, w, image_stack, num_actions)
-    target_dqn.load_state_dict(target_state_dict)
+    # online_dqn = DeepQNet(h, w, image_stack, num_actions)
+    # online_dqn.load_state_dict(online_state_dict)
+    # target_dqn = DeepQNet(h, w, image_stack, num_actions)
+    # target_dqn.load_state_dict(target_state_dict)
     
     
     
@@ -322,13 +347,16 @@ if testing_mode:
         episode_metrics, curr_step = run_episode(curr_step, buffer, is_training=False)
         update_metrics(test_metrics, episode_metrics)
         print_metrics(it + 1, test_metrics, is_training=False, window=1)
-
-  
-        
+ 
 else:
-    train_metrics = dict(reward=[], loss=[])
+    # if load_state:
+    #     online_dqn, target_dqn, curr_step, train_metrics = load_dqn(checkpoint_directory)
+
+    # else:
+    if load_state==False:
+        train_metrics = dict(reward=[], loss=[])
     t0 = time.time()
-    for it in range(max_train_episodes):
+    for it in range(episode_number+1,max_train_episodes):
         episode_metrics, curr_step = run_episode(curr_step, buffer, is_training=True)
         update_metrics(train_metrics, episode_metrics)
         t1 = time.time()
