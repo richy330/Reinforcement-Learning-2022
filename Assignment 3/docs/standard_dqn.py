@@ -50,8 +50,10 @@ save_network_period = 20
 
 env_rendering = False    # Set to False while training your model on Colab
 testing_mode = False    # if True, also give the checkpoint directory to load!
+
+load_state = False    #Set to True to load a state
 episode_number = 35000
-checkpoint_directory = f'./standard_model_eps_init{0.5}_episode{episode_number}.pth.tar'
+checkpoint_directory = f'../saved_models/standard_model_eps_init{0.5}_episode{episode_number}.pth.tar'
 
 
 class SkipFrame(gym.Wrapper):
@@ -112,14 +114,7 @@ class ExperienceReplayMemory(object):
 
     def sample(self, batch_size):
         # TODO: uniformly sample batches of Tensors for: state, next_state, action, reward, done
-        # ...
-
-        state = torch.empty(size=(batch_size, image_stack, obs_size, obs_size))
-        next_state = torch.empty(size=(batch_size, image_stack, obs_size, obs_size))
-        action = torch.empty(size=(batch_size,))
-        reward = torch.empty(size=(batch_size,))
-        done = torch.empty(size=(batch_size,))
-        
+        # ...       
         
         samples = random.sample(self.memory, batch_size)
         state = torch.tensor(np.array([s[0] for s in samples]), dtype=torch.float32)
@@ -127,16 +122,6 @@ class ExperienceReplayMemory(object):
         action = torch.tensor(np.array([s[2] for s in samples]), dtype=torch.float32)
         reward = torch.tensor(np.array([s[3] for s in samples]), dtype=torch.float32)
         done = torch.tensor(np.array([s[4] for s in samples]), dtype=torch.float32)
-        
-
-        # sample_indizes = rng.choice(len(self), size=batch_size, replace=True)
-        # for i, index in enumerate(sample_indizes):
-        #     one_state, one_next_state, one_action, one_reward, one_done = self.memory[index]
-        #     state[i, :, :, :] = torch.from_numpy(one_state)
-        #     next_state[i, :, :, :] = torch.from_numpy(one_next_state)
-        #     action[i] = one_action
-        #     reward[i] = one_reward
-        #     done[i] = one_done
         return state, next_state, action, reward, done
 
 
