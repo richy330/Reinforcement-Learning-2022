@@ -48,13 +48,12 @@ curr_step = 0
 print_metric_period = 1
 save_network_period = 100
 
-env_rendering = False    # Set to False while training your model on Colab
-testing_mode = False    # if True, also give the checkpoint directory to load!
+env_rendering = False   # Set to False while training your model on Colab
+testing_mode = False # if True, also give the checkpoint directory to load!
 
-load_state = True       #Set to True to load a state
-episode_number = 3200   #Number of episode to load
-checkpoint_directory = './standard_model_eps_init1.0_episode3200.pth.tar'
-#checkpoint_directory = './standard_model_eps_init{eps}_episode{episode_number}.pth.tar'
+load_state = True    #Set to True to load a state
+episode_number = 7600   #Number of episode to load
+checkpoint_directory = f'./standard_model_eps_init{eps}_episode{episode_number}.pth.tar'
 
 class SkipFrame(gym.Wrapper):
     def __init__(self, env, skip):
@@ -132,7 +131,6 @@ class ExperienceReplayMemory(object):
         return state, next_state, action, reward, done
 
 
-
 class DeepQNet(torch.nn.Module):
     def __init__(self, h, w, image_stack, num_actions):
         super(DeepQNet, self).__init__()
@@ -207,7 +205,6 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
         if is_training:
             buffer.store(state, next_state, action, reward, done)
             
-            
             if curr_step == burn_in_phase:
                 print('Burn in phase finished')
             if curr_step > burn_in_phase:
@@ -218,7 +215,6 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
                     # ...
                     print(f'Syncing Networks (current step: {curr_step})')
                     target_dqn.load_state_dict(online_dqn.state_dict())
-
                     
                 loss = compute_loss(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
                 optimizer.zero_grad()
@@ -269,13 +265,7 @@ def load_dqn(checkpoint_directory):
     target_dqn = DeepQNet(h, w, image_stack, num_actions)
     target_dqn.load_state_dict(target_state_dict)
     
-    online_dqn.to(device)
-    target_dqn.to(device)
-    
-
-     
-    return online_dqn, target_dqn, curr_step, train_metrics
-
+    return online_dqn, target_dqn, curr_step, train_metrics, eps
 
 
 buffer = ExperienceReplayMemory(experience_replay_size)
@@ -306,42 +296,27 @@ if torch.backends.cudnn.enabled:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-if load_state:
-    online_dqn, target_dqn, curr_step, train_metrics = load_dqn(checkpoint_directory)
-    it = episode_number +1
+if load_state or testing_mode == True:
+    online_dqn, target_dqn, curr_step, train_metrics, eps = load_dqn(checkpoint_directory)
 else:
     online_dqn = DeepQNet(h, w, image_stack, num_actions)
     target_dqn = copy.deepcopy(online_dqn)
-    online_dqn.to(device)
-    target_dqn.to(device)
-    epsilon_number = 0
+    episode_number = 0
+online_dqn.to(device)
+target_dqn.to(device)
         
 for param in target_dqn.parameters():
     param.requires_grad = False
+    
 # TODO: create the appropriate MSE criterion and Adam optimizer
+
 optimizer = torch.optim.Adam(online_dqn.parameters())
 criterion = torch.nn.MSELoss()
-
 
 if testing_mode:
     # TODO: Load your saved online_dqn model for evaluation
     # ...
-    
-    # checkpoint = torch.load(checkpoint_directory)
-    # online_state_dict = checkpoint['online_dqn']
-    # target_state_dict = checkpoint['target_dqn']
-    # curr_step = checkpoint['curr_step']
-    # train_metrics = checkpoint['train_metrics']
-    # eps = checkpoint['eps']
-    
-    
-    # online_dqn = DeepQNet(h, w, image_stack, num_actions)
-    # online_dqn.load_state_dict(online_state_dict)
-    # target_dqn = DeepQNet(h, w, image_stack, num_actions)
-    # target_dqn.load_state_dict(target_state_dict)
-    
-    
-    
+    curr_step = 0
     test_metrics = dict(reward=[], loss=[])
     for it in range(max_test_episodes):
         episode_metrics, curr_step = run_episode(curr_step, buffer, is_training=False)
@@ -349,10 +324,6 @@ if testing_mode:
         print_metrics(it + 1, test_metrics, is_training=False, window=1)
  
 else:
-    # if load_state:
-    #     online_dqn, target_dqn, curr_step, train_metrics = load_dqn(checkpoint_directory)
-
-    # else:
     if load_state==False:
         train_metrics = dict(reward=[], loss=[])
     t0 = time.time()
