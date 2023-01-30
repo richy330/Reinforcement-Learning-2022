@@ -1,3 +1,4 @@
 *.pth.tar
 **/runs
 *.zip
+*.png

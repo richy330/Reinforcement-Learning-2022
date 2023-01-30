@@ -7,12 +7,36 @@ Created on Mon Jan 30 16:39:26 2023
 """
 
 import matplotlib.pyplot as plt
+import matplotlib.pylab as pylab
 import numpy as np
 import torch
 
 
-max_episode_number_plot = 4000
+#%% adjusting plot appearance
+figsize = [12, 8]
+fontsize = 18
+dpi = 200
+
+pylab.rcParams.update({
+    'figure.figsize': figsize,
+    'legend.fontsize': fontsize,
+    'axes.labelsize': fontsize,
+    'axes.titlesize': fontsize,
+    'xtick.labelsize': fontsize,
+    'ytick.labelsize': fontsize,
+    'savefig.dpi': dpi,
+    "font.family": "serif"
+})
+
+
+
+
+
+
+max_episode_number_plot = 8001
 smoothing_window_len = 200
+plot_name = 'test_plot'
+legend_names = ['1 step', '3 step', '6 step']
 
 checkpoint_directories = [
     './finished_checkpoints/ddqn_model_eps_init0.8_episode8000_alpha0.00025_huber_loss_tau0.2.pth.tar',
@@ -41,12 +65,46 @@ def load_data(path):
 
 
 
-plt.figure()
+fig, ax1 = plt.subplots()
+ax2 = ax1.twinx()
+
+
+alphas = [1, 0.6, 0.3, 0.1]
+
+color1, color2 = 'red', 'blue'
 for i, path in enumerate(checkpoint_directories):
     loss, reward = load_data(path)
+    alpha = alphas[i]
+    label = legend_names[i]
     
-    plt.plot(loss, label=f'loss {i}')
-    plt.plot(reward, label=f'reward {i}')
+    ax1.plot(reward, label=f'reward {label}', alpha=alpha, color=color1)
+    ax2.plot(loss, label=f'loss {label}', alpha=alpha, color=color2)
+
     
-    
-plt.legend()
+fig.legend()
+ax1.set_xlabel('Epochs')
+
+ax1.set_ylabel('Reward', color=color1)
+ax2.set_ylabel('Loss', color=color2)
+
+ax1.tick_params(axis ='y', labelcolor = color1)
+ax2.tick_params(axis ='y', labelcolor = color2)
+
+plt.savefig(f'./{plot_name}.png')
+
+
+
+    # ax1.plot(loss_train, 'b',  label='Training loss')
+    # ax1.set_ylabel('Training loss', color='blue')
+    # ax1.tick_params(axis ='y', labelcolor = 'blue')
+    # ax1.set_ylim((0, None)) 
+
+    # ax2.plot(loss_train_val, 'r', label='Validation loss')
+    # ax2.set_ylabel('Validation Loss', color='red')
+    # ax2.tick_params(axis ='y', labelcolor = 'red') 
+    # ax2.set_ylim((0, None))
+    # plt.title(f'Distortion type: {selected_distortion}')
+    # fig.legend(loc='best', frameon=False)
+    # ax1.set_xlabel('Epochs')
+
+   
