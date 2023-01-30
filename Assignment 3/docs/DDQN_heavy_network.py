@@ -31,23 +31,21 @@ rng = np.random.default_rng()
 
 # Hyperparameters (to be modified)
 run_as_ddqn = True
-use_weighted_sampling = True
 selected_loss = 'huber_loss'
 
 
-eps_init = 0.5
+eps_init = 0.8
 TAU = 0.2
-MULTI_STEP_REWARD_N = 1
 batch_size = 32
 obs_size = 84
 alpha = 0.00025
 gamma = 0.95
 eps, eps_decay, min_eps = eps_init, 0.999, min(eps_init, 0.05)
-experience_replay_size = 4_000
+experience_replay_size = 10_000
 burn_in_phase = 2_000
 sync_target = 30_000
 max_train_frames = 10_000
-max_train_episodes = 8_000
+max_train_episodes = 80_001
 max_test_episodes = 1
 curr_step = 0
 print_metric_period = 10
@@ -55,10 +53,10 @@ save_network_period = 500
 
 env_rendering = False   # Set to False while training your model on Colab
 testing_mode = False    # if True, also give the checkpoint directory to load!
-plotting_only = False   # if True, also give the checkpoint directory to load!
+plotting_only = True   # if True, also give the checkpoint directory to load!
 
-load_pretrained_model = True    # Set to True to load a model and continue training with
-initial_episode_number = 2500    # Number of episode to load
+load_pretrained_model = False    # Set to True to load a model and continue training with
+initial_episode_number = 24000    # Number of episode to load
 
 
 model_type = {
@@ -72,8 +70,8 @@ criterion = {
 }[selected_loss]
 
 
-#checkpoint_directory = f'./{MULTI_STEP_REWARD_N}step_reward_{model_type}_eps_init{eps_init}_episode{initial_episode_number}_alpha0.00025_{selected_loss}_tau{TAU}.pth.tar'
-checkpoint_directory = './1step_reward_ddqn_model_eps_init0.5_episode2500_alpha0.00025_huber_loss_tau0.2.pth.tar'
+checkpoint_directory = f'./modded_reward_{model_type}_eps_init{eps_init}_episode{initial_episode_number}_alpha0.00025_{selected_loss}_tau{TAU}.pth.tar'
+checkpoint_directory = './modded_network_ddqn_model_eps_init0.8_episode24000_alpha0.00025_huber_loss_tau0.2.pth.tar'
 
 
 class SkipFrame(gym.Wrapper):
@@ -124,40 +122,28 @@ class ResizeObservation(gym.ObservationWrapper):
 class ExperienceReplayMemory(object):
     def __init__(self, capacity):
         self.memory = deque([], maxlen=capacity)
-        self.weights = deque([], maxlen=capacity)
 
     def __len__(self):
-        return len(self.memory)
-
-    def __getitem__(self, index):
-        return self.memory[index]   
-
-    def update_sample_weights(self, weights, indizes):
-        for w, i in zip(weights, indizes):
-            self.weights[i] = w
-        
-    def store(self, state, next_state, action, reward, done, weight=1):
+        return len(self.memory)        
+    
+    def store(self, state, next_state, action, reward, done):
         state = state.__array__()
         next_state = next_state.__array__()
         self.memory.append((state, next_state, action, reward, done))
-        self.weights.append(weight)
 
     def sample(self, batch_size):
         # DONE: uniformly sample batches of Tensors for: state, next_state, action, reward, done
         # ...
-        weights = np.array(self.weights)
-        sample_indizes = rng.choice(len(self), size=batch_size, p=weights/np.sum(weights))
+        samples = random.sample(self.memory, batch_size)
+        state = torch.tensor(np.array([s[0] for s in samples]), dtype=torch.float32)
+        next_state = torch.tensor(np.array([s[1] for s in samples]), dtype=torch.float32)
 
-        state = torch.tensor(np.array([self[i][0] for i in sample_indizes]), dtype=torch.float32)
-        next_state = torch.tensor(np.array([self[i][1] for i in sample_indizes]), dtype=torch.float32)
-
-        action_np = np.fromiter((self[i][2] for i in sample_indizes), float)
+        action_np = np.fromiter((s[2] for s in samples), float)
         action = torch.tensor(action_np, dtype=torch.float32)
-        reward = torch.tensor(np.array([self[i][3] for i in sample_indizes]), dtype=torch.float32)
-        done = torch.tensor(np.array([self[i][4] for i in sample_indizes]), dtype=torch.float32)
+        reward = torch.tensor(np.array([s[3] for s in samples]), dtype=torch.float32)
+        done = torch.tensor(np.array([s[4] for s in samples]), dtype=torch.float32)
                 
-        return state, next_state, action, reward, done, sample_indizes
-    
+        return state, next_state, action, reward, done
 
 
 class DeepQNet(torch.nn.Module):
@@ -171,31 +157,39 @@ class DeepQNet(torch.nn.Module):
         hidden_channel_numbers = [32, 64, 64]
         n_input_channels = image_stack
         
-        self.network = torch.nn.Sequential(
-            Conv2d(n_input_channels, hidden_channel_numbers[0], 8, stride=4),
-            ReLU(),
-            Conv2d(hidden_channel_numbers[0], hidden_channel_numbers[1], 4, stride=2),
-            ReLU(),
-            Conv2d(hidden_channel_numbers[1], hidden_channel_numbers[2], 3, stride=1),
-            ReLU(),
-            Flatten(),
-            Linear(3136, 512),
-            ReLU(),
-            Linear(512, num_actions),
-        )
-        
-        # self.network = nn.Sequential(
-        #     nn.Conv2d(4, 32, 8, stride=4),
-        #     nn.ReLU(),
-        #     nn.Conv2d(32, 64, 4, stride=2),
-        #     nn.ReLU(),
-        #     nn.Conv2d(64, 64, 3, stride=1),
-        #     nn.ReLU(),
-        #     nn.Flatten(),
-        #     nn.Linear(3136, 512),
-        #     nn.ReLU(),
-        #     nn.Linear(512, num_actions),
+        # self.network = torch.nn.Sequential(
+        #     Conv2d(n_input_channels, hidden_channel_numbers[0], 8, stride=4),
+        #     ReLU(),
+        #     Conv2d(hidden_channel_numbers[0], hidden_channel_numbers[1], 4, stride=2),
+        #     ReLU(),
+        #     Conv2d(hidden_channel_numbers[1], hidden_channel_numbers[2], 3, stride=1),
+        #     ReLU(),
+        #     Flatten(),
+        #     Linear(3136, 512),
+        #     ReLU(),
+        #     Linear(512, num_actions),
         # )
+        
+        self.network = nn.Sequential(
+            nn.Conv2d(4, 32, 8),
+            nn.ReLU(),
+            nn.MaxPool2d(3),
+            nn.Conv2d(32, 64, 4),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, 3),
+            nn.ReLU(),
+            nn.MaxPool2d(3),
+            nn.Conv2d(64, 64, 3),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(1024, 750),
+            nn.ReLU(),
+            nn.Linear(750, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, num_actions),
+        )
 
     def forward(self, x):
          # DONE: forward pass from the neural network
@@ -234,6 +228,8 @@ def compute_loss(state, action, reward, next_state, done):
     reward = reward.to(device)
     done = done.to(device)
     
+    # TODO: Reward function modified to punish being hit more
+    #reward -= 1000 * done.to(float)
     
     # DONE: Compute the DQN (or DDQN) loss based on the criterion
     # state, action, etc are already torch tensors of sampled batches
@@ -246,9 +242,7 @@ def compute_loss(state, action, reward, next_state, done):
         Q_online = torch.take(online_dqn(state), action.long())
         Q_target_max, _ = target_dqn(next_state).max(dim=1)
         Q_target = reward + gamma * Q_target_max * (1 - done.long())  
-        
-    td_error_vector = Q_target - Q_online
-    return criterion(Q_target, Q_online), td_error_vector
+    return criterion(Q_target, Q_online)
 
 
 def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: bool):
@@ -257,9 +251,6 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
     episode_reward, episode_loss = 0, 0.
 
     state = env.reset()
-    # n_step_rewards and sars_tuples are required for storing rewards for n steps
-    n_step_rewards = deque([], maxlen=MULTI_STEP_REWARD_N)
-    sars_tuples = deque([], maxlen=MULTI_STEP_REWARD_N)
     
     # max_train_frames is the max episode length
     for t in range(1, max_train_frames):
@@ -269,21 +260,18 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
         episode_reward += reward
         
         if is_training:
-            n_step_rewards.append(reward)
-            sars_tuples.append([state, next_state, action, reward, done]) 
-            
-            
-            if t >= MULTI_STEP_REWARD_N:
-                acc_reward = sum(r*gamma**i for i, r in enumerate(n_step_rewards))
-                sars_tuples[0][3] = acc_reward
-                buffer.store(*sars_tuples[0])
-
+            buffer.store(
+                copy.deepcopy(state),
+                copy.deepcopy(next_state),
+                copy.deepcopy(action), 
+                copy.deepcopy(reward),
+                copy.deepcopy(done))
             
             if curr_step == burn_in_phase:
                 print('Burn in phase finished')
                 print(f'Number of samples in buffer: {len(buffer)}')
             if curr_step > burn_in_phase:
-                state_batch, next_state_batch, action_batch, reward_batch, done_batch, sample_indizes = buffer.sample(batch_size)
+                state_batch, next_state_batch, action_batch, reward_batch, done_batch = buffer.sample(batch_size)
 
                 if curr_step % sync_target == 0:
                     # DONE: Periodically update your target_dqn at each sync_target frames
@@ -293,15 +281,11 @@ def run_episode(curr_step: int, buffer: ExperienceReplayMemory, is_training: boo
                         t_param.data.copy_(o_param.data*TAU + t_param.data*(1-TAU))
 
                     
-                loss, td_error = compute_loss(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
+                loss = compute_loss(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 episode_loss += loss.item()
-                
-                if use_weighted_sampling:
-                    updated_sample_weights = td_error.abs().detach().cpu().numpy()
-                    buffer.update_sample_weights(updated_sample_weights, sample_indizes)
         else:
             with torch.no_grad():
                 state_tensor = convert(state).unsqueeze(0)
@@ -434,7 +418,7 @@ if not plotting_only:
             if it % print_metric_period == 0:
                 print_metrics(it, train_metrics, is_training=True, it_per_hour=it_per_hour, window=1, eps=eps)
             if (it % save_network_period == 0) or (it == max_train_episodes):
-                checkpoint_directory = f'./{MULTI_STEP_REWARD_N}step_reward_{model_type}_eps_init{eps_init}_episode{it}_alpha{alpha}_{selected_loss}_tau{TAU}.pth.tar'
+                checkpoint_directory = f'./modded_network_{model_type}_eps_init{eps_init}_episode{it}_alpha{alpha}_{selected_loss}_tau{TAU}.pth.tar'
                 save_checkpoint(curr_step, eps, train_metrics, checkpoint_directory)
             t0 = time.time()     
         
