@@ -35,7 +35,7 @@ use_weighted_sampling = True
 selected_loss = 'huber_loss'
 
 
-eps_init = 0.5
+eps_init = 1.0
 TAU = 0.2
 MULTI_STEP_REWARD_N = 1
 batch_size = 32
@@ -57,7 +57,7 @@ env_rendering = False   # Set to False while training your model on Colab
 testing_mode = False    # if True, also give the checkpoint directory to load!
 plotting_only = False   # if True, also give the checkpoint directory to load!
 
-load_pretrained_model = True    # Set to True to load a model and continue training with
+load_pretrained_model = False    # Set to True to load a model and continue training with
 initial_episode_number = 2500    # Number of episode to load
 
 
@@ -164,7 +164,7 @@ class DeepQNet(torch.nn.Module):
     def __init__(self, h, w, image_stack, num_actions):
         super(DeepQNet, self).__init__()
         # DONE: create a convolutional neural network
-        # taken from https://github.com/vwxyzjn/cleanrl/blob/d0d6baed3910e6aebc0d5aba9c7cd10267d19e57/cleanrl/dqn_atari.py
+        # inspired by https://github.com/vwxyzjn/cleanrl/blob/d0d6baed3910e6aebc0d5aba9c7cd10267d19e57/cleanrl/dqn_atari.py
 
         
         # Grayscale image has one channel only, but we send 4 images per sample
@@ -184,23 +184,10 @@ class DeepQNet(torch.nn.Module):
             Linear(512, num_actions),
         )
         
-        # self.network = nn.Sequential(
-        #     nn.Conv2d(4, 32, 8, stride=4),
-        #     nn.ReLU(),
-        #     nn.Conv2d(32, 64, 4, stride=2),
-        #     nn.ReLU(),
-        #     nn.Conv2d(64, 64, 3, stride=1),
-        #     nn.ReLU(),
-        #     nn.Flatten(),
-        #     nn.Linear(3136, 512),
-        #     nn.ReLU(),
-        #     nn.Linear(512, num_actions),
-        # )
 
     def forward(self, x):
-         # DONE: forward pass from the neural network
-        # taken from https://github.com/vwxyzjn/cleanrl/blob/d0d6baed3910e6aebc0d5aba9c7cd10267d19e57/cleanrl/dqn_atari.py
-
+        # DONE: forward pass from the neural network
+        # inspired by https://github.com/vwxyzjn/cleanrl/blob/d0d6baed3910e6aebc0d5aba9c7cd10267d19e57/cleanrl/dqn_atari.py
         return self.network(x / 255.0)
     
     
@@ -218,10 +205,7 @@ def policy(state, is_training):
         return torch.tensor(random_action)
     else:
         online_actions = online_dqn(state) 
-        #print(online_actions.data)
-        #debug_readable_actions = online_actions.detach().numpy()
         greedy_action = online_actions.argmax(dim=1) 
-        #print(f'greedy action: {greedy_action.data}')
         if env_rendering:
             print(f'greedy action: {greedy_action}')
         return greedy_action
@@ -434,12 +418,12 @@ if not plotting_only:
             if it % print_metric_period == 0:
                 print_metrics(it, train_metrics, is_training=True, it_per_hour=it_per_hour, window=1, eps=eps)
             if (it % save_network_period == 0) or (it == max_train_episodes):
-                checkpoint_directory = f'./{MULTI_STEP_REWARD_N}step_reward_{model_type}_eps_init{eps_init}_episode{it}_alpha{alpha}_{selected_loss}_tau{TAU}.pth.tar'
+                checkpoint_directory = f'./{MULTI_STEP_REWARD_N}step_reward_{model_type}_eps_init{eps_init}_episode{it}_alpha{alpha}_{selected_loss}_tau{TAU}_weighted_sampling.pth.tar'
                 save_checkpoint(curr_step, eps, train_metrics, checkpoint_directory)
             t0 = time.time()     
         
         
-#%% Plotting results
+#%% Plotting some results
 
 
 window_len = 200
